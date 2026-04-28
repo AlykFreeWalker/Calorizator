@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Семейный Анализатор (Google Sheets)</title>
+    <style>
+        /* Стили оставляем прежние или улучшаем */
+        body { font-family: sans-serif; background: #f0f4f8; padding: 20px; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background: #4CAF50; color: white; }
+        .btn { padding: 8px 15px; border-radius: 4px; border: none; cursor: pointer; color: white; }
+        .add-btn { background: #3498db; }
+        .save-btn { background: #27ae60; }
+        .loading { color: orange; font-weight: bold; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🥗 Анализатор (База: Google Таблицы)</h1>
+    <div id="status" class="loading">Загрузка данных из таблицы...</div>
+
+    <div style="border: 1px dashed #ccc; padding: 15px; margin-bottom: 20px;">
+        <h3>Добавить продукт в общую базу</h3>
+        <input type="text" id="dbName" placeholder="Название">
+        <input type="number" id="dbProt" placeholder="Б" style="width:50px">
+        <input type="number" id="dbFat" placeholder="Ж" style="width:50px">
+        <input type="number" id="dbCarb" placeholder="У" style="width:50px">
+        <input type="number" id="dbKcal" placeholder="Ккал" style="width:60px">
+        <button class="btn save-btn" onclick="saveToSheets()">Сохранить в Google Sheets</button>
+    </div>
+
+    <table id="calcTable">
+        <thead>
+            <tr>
+                <th>Продукт</th>
+                <th>Вес (г)</th>
+                <th>Белки</th>
+                <th>Жиры</th>
+                <th>Угл.</th>
+                <th>Ккал</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody id="calcBody"></tbody>
+    </table>
+    <button class="btn add-btn" onclick="addCalcRow()">+ Добавить строку расчета</button>
+</div>
+
+<datalist id="foodList"></datalist>
+
+<script>
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzMo5hQBbDK4rlio5K79E8xR5EAONsjahPPQpB8NlNv30khnTlfjC-YDf4t5ByJVBLKkA/exec';
+    let foodDB = [];
+
+    // Загрузка данных из Google Таблицы
+    async function loadData() {
+        document.getElementById('status').style.display = 'block';
+        try {
+            const response = await fetch(SCRIPT_URL);
+            foodDB = await response.json();
+            updateDatalist();
+            document.getElementById('status').style.display = 'none';
+        } catch (e) {
+            alert('Ошибка загрузки данных. Проверьте URL скрипта.');
+        }
+    }
+
+    function updateDatalist() {
+        const list = document.getElementById('foodList');
+        list.innerHTML = foodDB.map(item => `<option value="${item.name}">`).join('');
+    }
+
+    // Сохранение в Google Таблицу
+    async function saveToSheets() {
+        const data = {
+            name: document.getElementById('dbName').value,
+            prot: document.getElementById('dbProt').value,
+            fat: document.getElementById('dbFat').value,
+            carb: document.getElementById('dbCarb').value,
+            kcal: document.getElementById('dbKcal').value
+        };
+
+        if (!data.name) return;
+
+        await fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors', // Важно для Apps Script
+            body: JSON.stringify(data)
+        });
+
+        alert('Продукт отправлен! Он появится в списке после обновления страницы (через пару секунд)');
+        loadData(); // Перезагружаем
+    }
+
+    function addCalcRow() {
+        const tbody = document.getElementById('calcBody');
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td><input type="text" list="foodList" oninput="autoFill(this)" style="width:100%"></td>
+            <td><input type="number" class="weight" value="100" oninput="calculate()" style="width:60px"></td>
+            <td class="r-p">0</td><td class="r-f">0</td><td class="r-c">0</td><td class="r-k">0</td>
+            <td><button onclick="this.parentElement.parentElement.remove(); calculate()">×</button></td>
+        `;
+        tbody.appendChild(row);
+    }
+
+    function autoFill(input) {
+        const row = input.parentElement.parentElement;
+        const product = foodDB.find(item => item.name === input.value);
+        if (product) {
+            row.dataset.p = product.prot; row.dataset.f = product.fat;
+            row.dataset.c = product.carb; row.dataset.k = product.kcal;
+            calculate();
+        }
+    }
+
+    function calculate() {
+        document.querySelectorAll('#calcBody tr').forEach(row => {
+            const w = parseFloat(row.querySelector('.weight').value) || 0;
+            const f = w / 100;
+            row.querySelector('.r-p').innerText = ((row.dataset.p || 0) * f).toFixed(1);
+            row.querySelector('.r-f').innerText = ((row.dataset.f || 0) * f).toFixed(1);
+            row.querySelector('.r-c').innerText = ((row.dataset.c || 0) * f).toFixed(1);
+            row.querySelector('.r-k').innerText = ((row.dataset.k || 0) * f).toFixed(0);
+        });
+    }
+
+    window.onload = () => { loadData(); addCalcRow(); };
+</script>
+</body>
+</html>
