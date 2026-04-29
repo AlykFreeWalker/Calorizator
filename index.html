@@ -2,69 +2,155 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Семейный Анализатор (Google Sheets)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Семейный Калькулятор Продуктов</title>
     <style>
-        /* Стили оставляем прежние или улучшаем */
-        body { font-family: sans-serif; background: #f0f4f8; padding: 20px; }
-        .container { max-width: 900px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-        th { background: #4CAF50; color: white; }
-        .btn { padding: 8px 15px; border-radius: 4px; border: none; cursor: pointer; color: white; }
-        .add-btn { background: #3498db; }
-        .save-btn { background: #27ae60; }
-        .loading { color: orange; font-weight: bold; display: none; }
+        :root {
+            --primary-color: #4CAF50;
+            --secondary-color: #2c3e50;
+            --accent-color: #3498db;
+            --bg-color: #f0f4f8;
+        }
+
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg-color); padding: 10px; color: #333; }
+        .container { max-width: 1100px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        
+        h1 { text-align: center; color: var(--secondary-color); border-bottom: 3px solid var(--primary-color); padding-bottom: 10px; }
+
+        /* Блок добавления в базу */
+        .db-panel { 
+            background: #f9f9f9; 
+            border: 1px dashed #bccad6; 
+            padding: 15px; 
+            margin-bottom: 25px; 
+            border-radius: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        .db-panel input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        
+        /* Таблица */
+        .table-wrapper { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; min-width: 600px; }
+        th, td { border: 1px solid #e0e0e0; padding: 12px 8px; text-align: center; }
+        th { background: var(--primary-color); color: white; font-weight: 600; }
+        
+        /* Подсказки (Tooltip) */
+        .weight-cell { position: relative; }
+        .hint-text {
+            visibility: hidden;
+            width: 180px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 8px;
+            position: absolute;
+            z-index: 10;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            pointer-events: none;
+        }
+        .weight-cell:hover .hint-text { visibility: visible; opacity: 1; }
+
+        /* Итоговые строки */
+        .total-row { background: var(--secondary-color); color: white; font-weight: bold; }
+        .avg-row { background: #ecf0f1; font-weight: bold; color: var(--secondary-color); }
+
+        /* Кнопки */
+        .btn { padding: 10px 20px; border-radius: 5px; border: none; cursor: pointer; font-weight: 600; transition: 0.2s; }
+        .add-btn { background: var(--accent-color); color: white; width: 100%; margin-top: 10px; }
+        .save-btn { background: var(--primary-color); color: white; }
+        .remove-btn { background: #ff4757; color: white; border-radius: 50%; width: 25px; height: 25px; line-height: 1; }
+        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        .loading-status { color: #f39c12; font-weight: bold; text-align: center; margin-bottom: 10px; display: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>🥗 Анализатор (База: Google Таблицы)</h1>
-    <div id="status" class="loading">Загрузка данных из таблицы...</div>
+    <h1>🥗 Семейный Калькулятор Калориев</h1>
+    
+    <div id="loading" class="loading-status">Синхронизация с Google Таблицей...</div>
 
-    <div style="border: 1px dashed #ccc; padding: 15px; margin-bottom: 20px;">
-        <h3>Добавить продукт в общую базу</h3>
-        <input type="text" id="dbName" placeholder="Название">
-        <input type="number" id="dbProt" placeholder="Б" style="width:50px">
-        <input type="number" id="dbFat" placeholder="Ж" style="width:50px">
-        <input type="number" id="dbCarb" placeholder="У" style="width:50px">
-        <input type="number" id="dbKcal" placeholder="Ккал" style="width:60px">
-        <button class="btn save-btn" onclick="saveToSheets()">Сохранить в Google Sheets</button>
+    <div class="db-panel">
+        <strong style="width: 100%">Добавить продукт в общую базу (на 100г):</strong>
+        <input type="text" id="dbName" placeholder="Название" style="flex: 2">
+        <input type="number" id="dbProt" placeholder="Белки" style="width: 60px">
+        <input type="number" id="dbFat" placeholder="Жиры" style="width: 60px">
+        <input type="number" id="dbCarb" placeholder="Угл." style="width: 60px">
+        <input type="number" id="dbKcal" placeholder="Ккал" style="width: 70px">
+        <input type="text" id="dbHint" placeholder="Подсказка (ложки и т.д.)" style="flex: 1">
+        <button class="btn save-btn" onclick="saveToSheets()">Сохранить</button>
     </div>
 
-    <table id="calcTable">
-        <thead>
-            <tr>
-                <th>Продукт</th>
-                <th>Вес (г)</th>
-                <th>Белки</th>
-                <th>Жиры</th>
-                <th>Угл.</th>
-                <th>Ккал</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody id="calcBody"></tbody>
-    </table>
-    <button class="btn add-btn" onclick="addCalcRow()">+ Добавить строку расчета</button>
+    <div class="table-wrapper">
+        <table id="calcTable">
+            <thead>
+                <tr>
+                    <th>Продукт (поиск)</th>
+                    <th>Вес (г)</th>
+                    <th>Белки</th>
+                    <th>Жиры</th>
+                    <th>Угл.</th>
+                    <th>Ккал</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="calcBody">
+                </tbody>
+            <tfoot>
+                <tr class="total-row">
+                    <td>ОБЩИЙ ИТОГ:</td>
+                    <td id="totalW">0</td>
+                    <td id="totalP">0.0</td>
+                    <td id="totalF">0.0</td>
+                    <td id="totalC">0.0</td>
+                    <td id="totalK">0</td>
+                    <td></td>
+                </tr>
+                <tr class="avg-row">
+                    <td>НА 100 ГРАММ:</td>
+                    <td>100</td>
+                    <td id="avgP">0.0</td>
+                    <td id="avgF">0.0</td>
+                    <td id="avgC">0.0</td>
+                    <td id="avgK">0</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <button class="btn add-btn" onclick="addCalcRow()">+ Добавить продукт в список</button>
 </div>
 
 <datalist id="foodList"></datalist>
 
 <script>
-    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzMo5hQBbDK4rlio5K79E8xR5EAONsjahPPQpB8NlNv30khnTlfjC-YDf4t5ByJVBLKkA/exec';
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzT3tT5FL83WkCMCa8DCc8sJlCzgJNg8Afa-tq0lWL7dvZznF-swmmekM8vwQ2S0Ztnhw/exec';
     let foodDB = [];
 
-    // Загрузка данных из Google Таблицы
+    // Загрузка базы из Google Sheets
     async function loadData() {
-        document.getElementById('status').style.display = 'block';
+        const statusEl = document.getElementById('loading');
+        statusEl.style.display = 'block';
         try {
             const response = await fetch(SCRIPT_URL);
             foodDB = await response.json();
             updateDatalist();
-            document.getElementById('status').style.display = 'none';
+            statusEl.style.display = 'none';
         } catch (e) {
-            alert('Ошибка загрузки данных. Проверьте URL скрипта.');
+            statusEl.innerText = "Ошибка загрузки данных!";
+            console.error(e);
         }
     }
 
@@ -73,62 +159,129 @@
         list.innerHTML = foodDB.map(item => `<option value="${item.name}">`).join('');
     }
 
-    // Сохранение в Google Таблицу
+    // Сохранение нового продукта
     async function saveToSheets() {
+        const btn = event.target;
         const data = {
             name: document.getElementById('dbName').value,
-            prot: document.getElementById('dbProt').value,
-            fat: document.getElementById('dbFat').value,
-            carb: document.getElementById('dbCarb').value,
-            kcal: document.getElementById('dbKcal').value
+            prot: document.getElementById('dbProt').value || 0,
+            fat: document.getElementById('dbFat').value || 0,
+            carb: document.getElementById('dbCarb').value || 0,
+            kcal: document.getElementById('dbKcal').value || 0,
+            hint: document.getElementById('dbHint').value || ""
         };
 
-        if (!data.name) return;
+        if (!data.name) return alert("Введите название!");
 
-        await fetch(SCRIPT_URL, {
-            method: 'POST',
-            mode: 'no-cors', // Важно для Apps Script
-            body: JSON.stringify(data)
-        });
+        btn.disabled = true;
+        btn.innerText = "Синхронизация...";
 
-        alert('Продукт отправлен! Он появится в списке после обновления страницы (через пару секунд)');
-        loadData(); // Перезагружаем
+        try {
+            await fetch(SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                body: JSON.stringify(data)
+            });
+            
+            // Очистка полей
+            document.querySelectorAll('.db-panel input').forEach(el => el.value = '');
+            alert("Данные отправлены в таблицу!");
+            loadData(); // Перезагружаем список
+        } catch (e) {
+            alert("Ошибка при сохранении");
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "Сохранить";
+        }
     }
 
+    // Добавление строки в таблицу расчета
     function addCalcRow() {
         const tbody = document.getElementById('calcBody');
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td><input type="text" list="foodList" oninput="autoFill(this)" style="width:100%"></td>
-            <td><input type="number" class="weight" value="100" oninput="calculate()" style="width:60px"></td>
-            <td class="r-p">0</td><td class="r-f">0</td><td class="r-c">0</td><td class="r-k">0</td>
-            <td><button onclick="this.parentElement.parentElement.remove(); calculate()">×</button></td>
+            <td><input type="text" list="foodList" oninput="autoFill(this)" style="width: 90%;" placeholder="Начните ввод..."></td>
+            <td class="weight-cell">
+                <input type="number" class="weight-input" value="100" oninput="calculate()" style="width: 70px">
+                <span class="hint-text">Меры веса не найдены</span>
+            </td>
+            <td class="res-p">0.0</td>
+            <td class="res-f">0.0</td>
+            <td class="res-c">0.0</td>
+            <td class="res-k">0</td>
+            <td><button class="remove-btn" onclick="this.parentElement.parentElement.remove(); calculate();">×</button></td>
         `;
         tbody.appendChild(row);
     }
 
+    // Автоподстановка данных при выборе продукта
     function autoFill(input) {
         const row = input.parentElement.parentElement;
         const product = foodDB.find(item => item.name === input.value);
+        
         if (product) {
-            row.dataset.p = product.prot; row.dataset.f = product.fat;
-            row.dataset.c = product.carb; row.dataset.k = product.kcal;
+            row.dataset.p = product.prot;
+            row.dataset.f = product.fat;
+            row.dataset.c = product.carb;
+            row.dataset.k = product.kcal;
+            row.querySelector('.hint-text').innerText = product.hint || "Меры веса не указаны";
             calculate();
         }
     }
 
+    // Основной расчет
     function calculate() {
+        let totals = { w: 0, p: 0, f: 0, c: 0, k: 0 };
+
         document.querySelectorAll('#calcBody tr').forEach(row => {
-            const w = parseFloat(row.querySelector('.weight').value) || 0;
-            const f = w / 100;
-            row.querySelector('.r-p').innerText = ((row.dataset.p || 0) * f).toFixed(1);
-            row.querySelector('.r-f').innerText = ((row.dataset.f || 0) * f).toFixed(1);
-            row.querySelector('.r-c').innerText = ((row.dataset.c || 0) * f).toFixed(1);
-            row.querySelector('.r-k').innerText = ((row.dataset.k || 0) * f).toFixed(0);
+            const w = parseFloat(row.querySelector('.weight-input').value) || 0;
+            const factor = w / 100;
+            
+            const p = (parseFloat(row.dataset.p) || 0) * factor;
+            const f = (parseFloat(row.dataset.f) || 0) * factor;
+            const c = (parseFloat(row.dataset.c) || 0) * factor;
+            const k = (parseFloat(row.dataset.k) || 0) * factor;
+
+            row.querySelector('.res-p').innerText = p.toFixed(1);
+            row.querySelector('.res-f').innerText = f.toFixed(1);
+            row.querySelector('.res-c').innerText = c.toFixed(1);
+            row.querySelector('.res-k').innerText = Math.round(k);
+
+            totals.w += w;
+            totals.p += p;
+            totals.f += f;
+            totals.c += c;
+            totals.k += k;
         });
+
+        // Заполнение строки ОБЩЕГО ИТОГА
+        document.getElementById('totalW').innerText = totals.w;
+        document.getElementById('totalP').innerText = totals.p.toFixed(1);
+        document.getElementById('totalF').innerText = totals.f.toFixed(1);
+        document.getElementById('totalC').innerText = totals.c.toFixed(1);
+        document.getElementById('totalK').innerText = Math.round(totals.k);
+
+        // Заполнение строки НА 100г
+        if (totals.w > 0) {
+            const ratio = 100 / totals.w;
+            document.getElementById('avgP').innerText = (totals.p * ratio).toFixed(1);
+            document.getElementById('avgF').innerText = (totals.f * ratio).toFixed(1);
+            document.getElementById('avgC').innerText = (totals.c * ratio).toFixed(1);
+            document.getElementById('avgK').innerText = Math.round(totals.k * ratio);
+        } else {
+            document.getElementById('avgP').innerText = "0.0";
+            document.getElementById('avgF').innerText = "0.0";
+            document.getElementById('avgC').innerText = "0.0";
+            document.getElementById('avgK').innerText = "0";
+        }
     }
 
-    window.onload = () => { loadData(); addCalcRow(); };
+    // Инициализация при загрузке
+    window.onload = () => {
+        loadData();
+        addCalcRow();
+    };
 </script>
+
 </body>
 </html>
